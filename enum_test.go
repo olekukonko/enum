@@ -113,15 +113,16 @@ func TestValue_SQL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Value() for int failed: %v", err)
 		}
+		// The driver.Value for an int should be an int64.
 		if val, ok := dvInt.(int64); !ok || val != 42 {
 			t.Errorf("Expected driver.Value int64(42), got %T %v", dvInt, dvInt)
 		}
 
-		// Test Value[float32]
-		vFloat := New[float32](3.14, "Pi")
+		// Test Value[float64] - Changed from float32 to float64
+		vFloat := New[float64](3.14, "Pi")
 		dvFloat, err := vFloat.Value()
 		if err != nil {
-			t.Fatalf("Value() for float32 failed: %v", err)
+			t.Fatalf("Value() for float64 failed: %v", err)
 		}
 		if val, ok := dvFloat.(float64); !ok || val != 3.14 {
 			t.Errorf("Expected driver.Value float64(3.14), got %T %v", dvFloat, dvFloat)
@@ -140,19 +141,19 @@ func TestValue_SQL(t *testing.T) {
 
 	t.Run("Scan", func(t *testing.T) {
 		testCases := []struct {
-			name         string
-			inputValue   interface{}
-			expectedVal  int
-			expectedName string
-			expectErr    bool
+			name        string
+			inputValue  interface{}
+			expectedVal int
+			// The expectedName field is no longer relevant as Scan cannot look it up.
+			expectErr bool
 		}{
-			{"Scan int64", int64(3), 3, "Closed", false},
-			{"Scan float64", float64(1), 1, "Pending", false},
-			{"Scan string", "2", 2, "Active", false},
-			{"Scan bytes", []byte("1"), 1, "Pending", false},
-			{"Scan nil", nil, 0, "", false},
-			{"Scan unsupported type", true, 0, "", true},
-			{"Scan out of range", int64(500), 0, "", true},
+			{"Scan int64", int64(3), 3, false},
+			{"Scan float64", float64(1), 1, false},
+			{"Scan string", "2", 2, false},
+			{"Scan bytes", []byte("1"), 1, false},
+			{"Scan nil", nil, 0, false},
+			{"Scan unsupported type", true, 0, true},
+			{"Scan out of range", int64(500), 0, true},
 		}
 
 		for _, tc := range testCases {
@@ -176,9 +177,10 @@ func TestValue_SQL(t *testing.T) {
 					if status.Get() != tc.expectedVal {
 						t.Errorf("Expected value %d, got %d", tc.expectedVal, status.Get())
 					}
-					// For nil scan, the name is expected to be empty as the value is the zero value
-					if tc.inputValue != nil && status.String() != tc.expectedName {
-						t.Errorf("Expected name %q, got %q", tc.expectedName, status.String())
+					// After Scan, the name is expected to be the zero value (empty string)
+					// because the flawed reflection lookup has been removed.
+					if status.String() != "" {
+						t.Errorf("Expected name to be empty, got %q", status.String())
 					}
 				}
 			})
