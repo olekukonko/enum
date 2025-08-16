@@ -26,7 +26,7 @@ func (s Status) Name(val int) (string, bool) {
 
 func TestValue_Basic(t *testing.T) {
 	t.Run("Get and String", func(t *testing.T) {
-		v := New[string]("test", "TestName")
+		v := NewValue[string]("test", "TestName")
 		if v.Get() != "test" {
 			t.Errorf("Expected Get() to return 'test', got %q", v.Get())
 		}
@@ -38,7 +38,7 @@ func TestValue_Basic(t *testing.T) {
 
 func TestValue_JSON(t *testing.T) {
 	t.Run("MarshalJSON", func(t *testing.T) {
-		v := New[int](123, "MyValue")
+		v := NewValue[int](123, "MyValue")
 		b, err := json.Marshal(v)
 		if err != nil {
 			t.Fatalf("MarshalJSON failed: %v", err)
@@ -96,7 +96,7 @@ func TestValue_JSON(t *testing.T) {
 
 func TestValue_SQL(t *testing.T) {
 	t.Run("Value", func(t *testing.T) {
-		v := New[string]("active", "Active")
+		v := NewValue[string]("active", "Active")
 		dv, err := v.Value()
 		if err != nil {
 			t.Fatalf("Value() failed: %v", err)
@@ -106,9 +106,9 @@ func TestValue_SQL(t *testing.T) {
 		}
 	})
 
-	t.Run("Value with Different Types", func(t *testing.T) {
+	t.Run("Value with Different ValueTypes", func(t *testing.T) {
 		// Test Value[int]
-		vInt := New[int](42, "FortyTwo")
+		vInt := NewValue[int](42, "FortyTwo")
 		dvInt, err := vInt.Value()
 		if err != nil {
 			t.Fatalf("Value() for int failed: %v", err)
@@ -119,7 +119,7 @@ func TestValue_SQL(t *testing.T) {
 		}
 
 		// Test Value[float64] - Changed from float32 to float64
-		vFloat := New[float64](3.14, "Pi")
+		vFloat := NewValue[float64](3.14, "Pi")
 		dvFloat, err := vFloat.Value()
 		if err != nil {
 			t.Fatalf("Value() for float64 failed: %v", err)
@@ -129,7 +129,7 @@ func TestValue_SQL(t *testing.T) {
 		}
 
 		// Test Value[string]
-		vString := New[string]("test", "Test")
+		vString := NewValue[string]("test", "Test")
 		dvString, err := vString.Value()
 		if err != nil {
 			t.Fatalf("Value() for string failed: %v", err)
