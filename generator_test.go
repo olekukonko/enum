@@ -2,6 +2,7 @@ package enum
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -249,10 +250,13 @@ func TestGenerator_Concurrency(t *testing.T) {
 
 	wg.Add(numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
-		go func() {
+		// FIX: Pass the loop counter 'i' to the goroutine to create a unique name.
+		go func(index int) {
 			defer wg.Done()
-			g.Next("SomeName")
-		}()
+			// Create a unique name for each goroutine.
+			uniqueName := fmt.Sprintf("SomeName%d", index)
+			g.Next(uniqueName)
+		}(i) // Pass i as an argument to the goroutine.
 	}
 	wg.Wait()
 

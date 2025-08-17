@@ -33,23 +33,15 @@ import (
 	"reflect"
 )
 
-// MakeEnumValue is a type constraint for enum values used with Maker.
-// It restricts the underlying type to integers (signed or unsigned), as Maker
-// assigns sequential integer values to struct fields.
-type MakeEnumValue interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 |
-		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
-}
-
 // Maker provides a reflection-based mechanism to create enums from struct fields.
 // It populates exported fields of a struct (type T) with sequential values of type E
-// (an integer type constrained by MakeEnumValue) and maintains mappings of values to
+// (an integer type constrained by TypesMake) and maintains mappings of values to
 // field names and vice versa. It is less performant than other enum approaches due to
 // reflection but is convenient for simple, static enums.
 //
 // The Maker is not thread-safe, as it is designed for initialization and read-only access
 // after creation. Use Make to create a Maker instance.
-type Maker[T any, E MakeEnumValue] struct {
+type Maker[T any, E TypesMake] struct {
 	instance *T           // Pointer to the populated struct instance.
 	valueMap map[E]string // Maps enum values to field names.
 	nameMap  map[string]E // Maps field names to enum values.
@@ -82,7 +74,7 @@ type Maker[T any, E MakeEnumValue] struct {
 //	fmt.Println(s.Pending)     // Output: 0
 //	fmt.Println(m.Name(1))     // Output: Active, true
 //	fmt.Println(m.Get("Done")) // Output: 2, true
-func Make[T any, E MakeEnumValue](construct *T) *Maker[T, E] {
+func Make[T any, E TypesMake](construct *T) *Maker[T, E] {
 	val := reflect.ValueOf(construct)
 	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Struct {
 		panic("enum.Make: construct must be a pointer to a struct")
@@ -131,7 +123,7 @@ func Make[T any, E MakeEnumValue](construct *T) *Maker[T, E] {
 
 		valueMap[value] = field.Name
 		nameMap[field.Name] = value
-		entries = append(entries, New(value, field.Name))
+		entries = append(entries, NewValue(value, field.Name))
 	}
 
 	return &Maker[T, E]{
@@ -139,6 +131,84 @@ func Make[T any, E MakeEnumValue](construct *T) *Maker[T, E] {
 		valueMap: valueMap,
 		nameMap:  nameMap,
 		entries:  entries,
+	}
+}
+
+// MakeManual creates a Maker instance without reflection by using a user-provided
+// initialization function to populate the struct and a Generator to manage enum values.
+// The init function should use the provided Generator to create enum values and set them
+// on the struct. The resulting Maker maintains value-to-name and name-to-value mappings
+// consistent with the Generator's state.
+//
+// Example:
+//
+//	type Colors struct{ Red, Blue int }
+//	var c Colors
+//	m := MakeManual(&c, func(g *Generator[int]) *Colors {
+//	    c.Red = g.Next("Red").Get()
+//	    c.Blue = g.Next("Blue").Get()
+//	    return &c
+//	})
+func MakeManual[T any, E TypesMake](construct *T, init func(*Generator[E]) *T) *Maker[T, E] {
+	if construct == nil {
+		panic("enum.MakeManual: construct must not be nil")
+	}
+
+	// Create a Generator with default settings
+	g := NewGenerator[E]()
+
+	// Initialize struct using user-provided function
+	result := init(g)
+	if result != construct {
+		panic("enum.MakeManual: init function must return the same struct pointer as construct")
+	}
+
+	return &Maker[T, E]{
+		instance: construct,
+		valueMap: g.ValueMap(),
+		nameMap:  g.NameMap(),
+		entries:  g.Values(),
+	}
+}
+
+// MakeManualWithBasic creates a Maker instance without reflection by using a user-provided
+// initialization function to populate the struct with Basic values. The init function should
+// use the provided Basic to create enum values and set them on the struct. The resulting
+// Maker maintains value-to-name and name-to-value mappings consistent with the Basic's state.
+//
+// Example:
+//
+//	type Colors struct{ Red, Blue Basic }
+//	var c Colors
+//	b := NewBasic()
+//	m := MakeManualWithBasic(&c, b, func(b *Basic) *Colors {
+//	    c.Red = b.Add("Red")
+//	    c.Blue = b.Add("Blue")
+//	    return &c
+//	})
+func MakeManualWithBasic[T any](construct *T, b *Basic, init func(*Basic) *T) *Maker[T, int] {
+	if construct == nil {
+		panic("enum.MakeManualWithBasic: construct must not be nil")
+	}
+	if b == nil {
+		panic("enum.MakeManualWithBasic: Basic instance must not be nil")
+	}
+
+	// Initialize the user's struct using their provided function.
+	// This populates the internal state of the Generator within 'b'.
+	result := init(b)
+	if result != construct {
+		panic("enum.MakeManualWithBasic: init function must return the same struct pointer as construct")
+	}
+
+	// Create the Maker by using the public, thread-safe methods of the
+	// underlying Generator. This is safer and cleaner than accessing
+	// internal fields directly.
+	return &Maker[T, int]{
+		instance: construct,
+		valueMap: b.meta.ValueMap(),
+		nameMap:  b.meta.NameMap(),
+		entries:  b.meta.Values(),
 	}
 }
 
@@ -271,5 +341,54 @@ func (e *Maker[T, E]) MarshalJSON() ([]byte, error) {
 // Note: This may leave the Maker in an inconsistent state if the deserialized map
 // does not match the struct’s fields.
 func (e *Maker[T, E]) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &e.valueMap)
+	// Check if instance is initialized
+	if e.instance == nil {
+		return fmt.Errorf("cannot unmarshal: Maker instance is nil")
+	}
+
+	// Deserialize into temporary map
+	var tempMap map[E]string
+	if err := json.Unmarshal(data, &tempMap); err != nil {
+		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	// Validate against struct fields
+	elem := reflect.ValueOf(e.instance).Elem()
+	if elem.Kind() != reflect.Struct {
+		return fmt.Errorf("instance is not a struct")
+	}
+	rc := elem.Type()
+	tempNameMap := make(map[string]E, len(tempMap))
+	tempEntries := make([]Value[E], 0, len(tempMap))
+
+	// Check that all struct fields are represented in tempMap
+	for i := 0; i < rc.NumField(); i++ {
+		field := rc.Field(i)
+		if !elem.Field(i).CanSet() {
+			continue // Skip unexported fields
+		}
+		value, ok := e.nameMap[field.Name]
+		if !ok {
+			return fmt.Errorf("field %q not found in nameMap", field.Name)
+		}
+		name, ok := tempMap[value]
+		if !ok || name != field.Name {
+			return fmt.Errorf("invalid value %v or name %q for field %q", value, name, field.Name)
+		}
+		tempNameMap[name] = value
+		tempEntries = append(tempEntries, NewValue(value, name))
+	}
+
+	// Check for extra entries in tempMap
+	for value, name := range tempMap {
+		if _, ok := tempNameMap[name]; !ok {
+			return fmt.Errorf("unexpected value %v with name %q in JSON", value, name)
+		}
+	}
+
+	// Update state
+	e.valueMap = tempMap
+	e.nameMap = tempNameMap
+	e.entries = tempEntries
+	return nil
 }

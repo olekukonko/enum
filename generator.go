@@ -1,6 +1,6 @@
 // Package enum provides a generic implementation of enumerated types (enums) in Go.
 // The Generator type in this package enables flexible, thread-safe creation and management
-// of enum values for types constrained by the Types interface (strings, integers, or floats).
+// of enum values for types constrained by the TypesValue interface (strings, integers, or floats).
 // Generators support sequential generation (e.g., incrementing numbers, alphabetical strings),
 // custom increment logic, and static mappings for non-sequential enums.
 //
@@ -37,7 +37,7 @@ import (
 // The Generator maintains mappings of values to names and names to values, and provides
 // methods for lookup, parsing, and validation. Use NewGenerator or specialized constructors
 // (e.g., NewNumeric, NewAlpha) to create a Generator.
-type Generator[T Types] struct {
+type Generator[T TypesValue] struct {
 	mu          sync.RWMutex // Protects concurrent access to generator state.
 	current     T            // Current value for the next enum entry.
 	incrementer func(T) T    // Function to compute the next value in the sequence.
@@ -58,7 +58,7 @@ type Generator[T Types] struct {
 //	g := NewGenerator[int](WithStart(10), WithIncrementer(func(x int) int { return x + 2 }))
 //	v := g.Next("Ten") // Value[int]{value: 10, name: "Ten"}
 //	fmt.Println(v.Get()) // Output: 10
-func NewGenerator[T Types](opts ...Option[T]) *Generator[T] {
+func NewGenerator[T TypesValue](opts ...Option[T]) *Generator[T] {
 	g := &Generator[T]{
 		current:     *new(T),
 		incrementer: defaultIncrementer[T],
@@ -72,10 +72,10 @@ func NewGenerator[T Types](opts ...Option[T]) *Generator[T] {
 }
 
 // Option is a function that configures a Generator[T].
-type Option[T Types] func(*Generator[T])
+type Option[T TypesValue] func(*Generator[T])
 
 // WithStart sets the starting value for the Generator's sequence.
-func WithStart[T Types](start T) Option[T] {
+func WithStart[T TypesValue](start T) Option[T] {
 	return func(g *Generator[T]) {
 		g.current = start
 	}
@@ -83,7 +83,7 @@ func WithStart[T Types](start T) Option[T] {
 
 // WithIncrementer sets a custom increment function for the Generator.
 // The function takes the current value and returns the next value in the sequence.
-func WithIncrementer[T Types](inc func(T) T) Option[T] {
+func WithIncrementer[T TypesValue](inc func(T) T) Option[T] {
 	return func(g *Generator[T]) {
 		g.incrementer = inc
 	}
@@ -110,7 +110,7 @@ func NewAlpha() *Generator[string] {
 //
 //	g := NewNumeric(100)
 //	v := g.Next("Hundred") // Value[int]{value: 100, name: "Hundred"}
-func NewNumeric[T Types](start T) *Generator[T] {
+func NewNumeric[T TypesValue](start T) *Generator[T] {
 	return NewGenerator[T](WithStart(start))
 }
 
@@ -124,7 +124,7 @@ func NewNumeric[T Types](start T) *Generator[T] {
 //	g := NewBitFlagGenerator(1)
 //	v1 := g.Next("Flag1") // Value[int]{value: 1, name: "Flag1"}
 //	v2 := g.Next("Flag2") // Value[int]{value: 2, name: "Flag2"}
-func NewBitFlagGenerator[T Types](start T) *Generator[T] {
+func NewBitFlagGenerator[T TypesValue](start T) *Generator[T] {
 	return NewGenerator[T](
 		WithStart(start),
 		WithIncrementer(func(x T) T {
@@ -215,7 +215,7 @@ func NewCyclic(modulus int) *Generator[int] {
 //	m := map[string]int{"Small": 1, "Large": 100}
 //	g := NewMapped(m)
 //	v, err := g.Parse("Small") // Value[int]{value: 1, name: "Small"}
-func NewMapped[T Types](nameToValueMap map[string]T) *Generator[T] {
+func NewMapped[T TypesValue](nameToValueMap map[string]T) *Generator[T] {
 	g := &Generator[T]{
 		incrementer: nil, // Prevent Next() usage
 		valueMap:    make(map[T]string, len(nameToValueMap)),
@@ -223,7 +223,7 @@ func NewMapped[T Types](nameToValueMap map[string]T) *Generator[T] {
 		values:      make([]Value[T], 0, len(nameToValueMap)),
 	}
 	for name, value := range nameToValueMap {
-		entry := New(value, name)
+		entry := NewValue(value, name)
 		g.values = append(g.values, entry)
 		g.nameMap[name] = value
 		g.valueMap[value] = name
@@ -243,9 +243,15 @@ func (g *Generator[T]) Next(name string) Value[T] {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	// FIX: Check for duplicate names before adding.
+	if _, exists := g.nameMap[name]; exists {
+		panic(fmt.Sprintf("enum: name %q already exists", name))
+	}
+
 	val := g.current
 	g.current = g.incrementer(g.current)
-	entry := New(val, name)
+	entry := NewValue(val, name)
 	g.values = append(g.values, entry)
 	g.valueMap[val] = name
 	g.nameMap[name] = val
@@ -362,14 +368,14 @@ func (g *Generator[T]) Parse(s string) (Value[T], error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	if val, ok := g.nameMap[s]; ok {
-		return New(val, s), nil
+		return NewValue(val, s), nil
 	}
 	parsedVal, err := parseStringToValue[T](s)
 	if err != nil {
 		return Value[T]{}, err
 	}
 	if name, ok := g.valueMap[parsedVal]; ok {
-		return New(parsedVal, name), nil
+		return NewValue(parsedVal, name), nil
 	}
 	return Value[T]{}, fmt.Errorf("no matching enum value for %q", s)
 }
@@ -424,7 +430,7 @@ func (g *Generator[T]) ValidValues() []T {
 // For integers and floats, it adds 1. For strings, it increments alphabetically
 // (e.g., "A" -> "B", "Z" -> "AA", "AZ" -> "BA"). It is used when no custom
 // incrementer is provided to NewGenerator.
-func defaultIncrementer[T Types](x T) T {
+func defaultIncrementer[T TypesValue](x T) T {
 	switch v := any(x).(type) {
 	case string:
 		runes := []rune(v)

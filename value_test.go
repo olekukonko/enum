@@ -106,7 +106,7 @@ func TestValue_SQL(t *testing.T) {
 		}
 	})
 
-	t.Run("Value with Different ValueTypes", func(t *testing.T) {
+	t.Run("Value with Different TypesValue", func(t *testing.T) {
 		// Test Value[int]
 		vInt := NewValue[int](42, "FortyTwo")
 		dvInt, err := vInt.Value()

@@ -1,18 +1,18 @@
 package enum
 
-// ValueTypes is a constraint that defines all supported underlying types for enums.
+// TypesValue is a constraint that defines all supported underlying types for enums.
 // It includes string, all standard integer types (signed and unsigned), and
 // floating-point types (float32 and float64).
-type ValueTypes interface {
+type TypesValue interface {
 	~string | ~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
 		~float32 | ~float64
 }
 
-// MakeTypes is a type constraint for enum values used with Maker.
+// TypesMake is a type constraint for enum values used with Maker.
 // It restricts the underlying type to integers (signed or unsigned), as Maker
 // assigns sequential integer values to struct fields.
-type MakeTypes interface {
+type TypesMake interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }

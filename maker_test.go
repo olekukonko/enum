@@ -1,7 +1,9 @@
+// maker_test.go
 package enum
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -118,18 +120,20 @@ func TestMaker(t *testing.T) {
 		if err != nil {
 			t.Fatalf("MarshalJSON failed: %v", err)
 		}
-		expected := `{"0":"Pending","1":"Active"}`
-		if s := string(b); s != expected && s != `{"1":"Active","0":"Pending"}` {
-			t.Errorf("Expected JSON %s, got %s", expected, s)
+		expected1 := `{"0":"Pending","1":"Active"}`
+		expected2 := `{"1":"Active","0":"Pending"}` // Order not guaranteed
+		if s := string(b); s != expected1 && s != expected2 {
+			t.Errorf("Expected JSON like %s, got %s", expected1, s)
 		}
 
-		var newM Maker[Status, int]
-		err = json.Unmarshal(b, &newM)
+		var s2 Status
+		newM := Make[Status, int](&s2)
+		err = newM.UnmarshalJSON(b)
 		if err != nil {
 			t.Fatalf("UnmarshalJSON failed: %v", err)
 		}
 		if name, ok := newM.Name(1); !ok || name != "Active" {
-			t.Errorf("Expected Active for 1, got %s", name)
+			t.Errorf("Expected Active for 1 after unmarshal, got %s", name)
 		}
 	})
 }
@@ -156,4 +160,67 @@ func TestMaker_Additional(t *testing.T) {
 			t.Errorf("Expected 0 entries for struct with only unexported fields, got %d", len(m.Entries()))
 		}
 	})
+}
+
+func TestMaker_JSON_Marshal_and_Unmarshal(t *testing.T) {
+	type Colors struct{ Red, Blue int }
+	var c Colors
+	m := Make[Colors, int](&c)
+	jsonData, err := m.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var c2 Colors
+	m2 := Make[Colors, int](&c2)
+	if err := m2.UnmarshalJSON(jsonData); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(m.ValueMap(), m2.ValueMap()) {
+		t.Errorf("expected valueMap %v, got %v", m.ValueMap(), m2.ValueMap())
+	}
+	// This check is valid because Make(&c2) sets the fields to 0 and 1.
+	// UnmarshalJSON does not change them, so they should remain.
+	if c2.Red != 0 || c2.Blue != 1 {
+		t.Errorf("expected struct {Red:0, Blue:1}, got %+v", c2)
+	}
+}
+
+func TestMakeManualWithBasic_JSON(t *testing.T) {
+	type Colors struct{ Red, Blue Basic }
+	var c Colors
+	b := NewBasic()
+	m := MakeManualWithBasic(&c, b, func(b *Basic) *Colors {
+		c.Red = b.Add("Red")
+		c.Blue = b.Add("Blue")
+		return &c
+	})
+
+	// Test MarshalJSON
+	data, err := m.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected1 := `{"0":"Red","1":"Blue"}`
+	expected2 := `{"1":"Blue","0":"Red"}` // Order is not guaranteed
+	if s := string(data); s != expected1 && s != expected2 {
+		t.Errorf("expected JSON like %q, got %q", expected1, s)
+	}
+
+	// Test UnmarshalJSON
+	var c2 Colors
+	b2 := NewBasic()
+	// We must define the same enum values for the new maker before unmarshaling.
+	m2 := MakeManualWithBasic(&c2, b2, func(b *Basic) *Colors {
+		c2.Red = b.Add("Red")
+		c2.Blue = b.Add("Blue")
+		return &c2
+	})
+	if err := m2.UnmarshalJSON(data); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(m.ValueMap(), m2.ValueMap()) {
+		t.Errorf("expected valueMap %v, got %v", m.ValueMap(), m2.ValueMap())
+	}
 }
