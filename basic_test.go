@@ -31,11 +31,11 @@ func TestBasicEnum(t *testing.T) {
 		red := colors.Add("Red")
 		blue := colors.Add("Blue")
 
-		if red.Int() != 0 {
-			t.Errorf("Expected Red value 0, got %d", red.Int())
+		if red.Get() != 0 {
+			t.Errorf("Expected Red value 0, got %d", red.Get())
 		}
-		if blue.Int() != 1 {
-			t.Errorf("Expected Blue value 1, got %d", blue.Int())
+		if blue.Get() != 1 {
+			t.Errorf("Expected Blue value 1, got %d", blue.Get())
 		}
 	})
 
@@ -44,11 +44,11 @@ func TestBasicEnum(t *testing.T) {
 		ok := http.Add("OK").With(200)
 		notFound := http.Add("NotFound").With(404)
 
-		if ok.Int() != 200 {
-			t.Errorf("Expected OK value 200, got %d", ok.Int())
+		if ok.Get() != 200 {
+			t.Errorf("Expected OK value 200, got %d", ok.Get())
 		}
-		if notFound.Int() != 404 {
-			t.Errorf("Expected NotFound value 404, got %d", notFound.Int())
+		if notFound.Get() != 404 {
+			t.Errorf("Expected NotFound value 404, got %d", notFound.Get())
 		}
 	})
 
@@ -95,8 +95,8 @@ func TestBasicEnum(t *testing.T) {
 		if result.String() != "Pending" {
 			t.Errorf("Expected 'Pending' after roundtrip, got %q", result.String())
 		}
-		if result.Int() != 0 {
-			t.Errorf("Expected value 0 after roundtrip, got %d", result.Int())
+		if result.Get() != 0 {
+			t.Errorf("Expected value 0 after roundtrip, got %d", result.Get())
 		}
 	})
 

@@ -231,7 +231,7 @@ func TestParseStringToValue(t *testing.T) {
 			t.Errorf("Expected 1.23, got %f, err: %v", v, err)
 		}
 	})
-	t.Run("Invalid String for Int", func(t *testing.T) {
+	t.Run("Invalid String for Get", func(t *testing.T) {
 		_, err := parseStringToValue[int]("not-a-number")
 		if err == nil {
 			t.Error("Expected error for invalid integer string")

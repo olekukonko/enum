@@ -1,3 +1,3 @@
-module git.imaxinacion.net/aibox/enum
+module github.com/olekukonko/enum
 
 go 1.21

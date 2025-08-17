@@ -25,7 +25,7 @@ import (
 //	b := NewBasic()
 //	pending := b.Add("Pending") // value: 0
 //	active := b.Add("Active")   // value: 1
-//	fmt.Println(pending.Int(), pending.String()) // Output: 0, "Pending"
+//	fmt.Println(pending.Get(), pending.String()) // Output: 0, "Pending"
 //	data, _ := active.MarshalJSON()
 //	fmt.Println(string(data)) // Output: 1
 type Basic struct {
@@ -91,7 +91,7 @@ func (e *Basic) Add(name string) Basic {
 //	b := NewBasic()
 //	pending := b.Add("Pending") // value: 0
 //	custom := pending.With(100) // Reassigns Pending to value 100
-//	fmt.Println(custom.Int())    // Output: 100
+//	fmt.Println(custom.Get())    // Output: 100
 func (e Basic) With(v int) Basic {
 	e.meta.mu.Lock()
 	defer e.meta.mu.Unlock()
@@ -136,14 +136,14 @@ func (e Basic) String() string {
 	return e.name
 }
 
-// Int returns the integer value of the enum.
+// Get returns the integer value of the enum.
 //
 // Example:
 //
 //	b := NewBasic()
 //	pending := b.Add("Pending")
-//	fmt.Println(pending.Int()) // Output: 0
-func (e Basic) Int() int {
+//	fmt.Println(pending.Get()) // Output: 0
+func (e Basic) Get() int {
 	return e.value
 }
 
